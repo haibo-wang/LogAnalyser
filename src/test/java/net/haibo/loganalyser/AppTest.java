@@ -1,5 +1,8 @@
 package net.haibo.loganalyser;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import junit.framework.Test;
 import junit.framework.TestCase;
 import junit.framework.TestSuite;
@@ -33,6 +36,13 @@ public class AppTest
      */
     public void testApp()
     {
-        assertTrue( true );
+    	String badline = "containing 405 bad lines";
+    	Pattern badLinesPattern = Pattern.compile("\\b([1-9]\\d*)\\s+bad\\s+lines\\b");
+
+    	Matcher matcher = badLinesPattern.matcher(badline);
+    	assertTrue(matcher.find());
+
+    	System.out.println(matcher.group(1));        	
+
     }
 }
