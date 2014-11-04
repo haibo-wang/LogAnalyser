@@ -90,6 +90,8 @@ public class LogAnalyser extends Configured implements Tool {
 			if (matcher.find()) {
 				context.write(new Text(fileName),
 						new IntWritable(Integer.parseInt(matcher.group(1))));
+				// found, no need to continue the task andy more
+				throw new InterruptedException();
 				
 			}
 		}
