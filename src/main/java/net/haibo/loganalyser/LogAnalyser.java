@@ -67,18 +67,36 @@ public class LogAnalyser extends Configured implements Tool {
 	public static class RegexFilenameMapper extends
 			Mapper<LongWritable, Text, Text, IntWritable> {
 
+	
 		private String fileName;
 		private Pattern badLinesPattern = Pattern
 				.compile("\\b([1-9]\\d*)\\s+bad\\s+lines\\b");
+		private boolean patternFound = false;
 
 		@Override
 		protected void setup(
 				Mapper<LongWritable, Text, Text, IntWritable>.Context context)
 				throws IOException, InterruptedException {
+			
 			super.setup(context);
 			
 			fileName = ((FileSplit) context.getInputSplit()).getPath().getName();
 
+		}
+		
+		@Override
+		public void run(
+				Mapper<LongWritable, Text, Text, IntWritable>.Context context)
+						throws IOException, InterruptedException {
+			
+			setup(context);
+			try {
+				while (context.nextKeyValue() && patternFound == false ) {
+					map(context.getCurrentKey(), context.getCurrentValue(), context);
+				}
+			} finally {
+				cleanup(context);
+			}
 		}
 
 		@Override
@@ -90,12 +108,10 @@ public class LogAnalyser extends Configured implements Tool {
 			if (matcher.find()) {
 				context.write(new Text(fileName),
 						new IntWritable(Integer.parseInt(matcher.group(1))));
-				// found, no need to continue the task andy more
-				throw new InterruptedException();
+				patternFound = true;
 				
 			}
 		}
-
 	}
 
 	// the default implementation will just write out whatever it gets from the
