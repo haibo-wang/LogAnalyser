@@ -52,12 +52,7 @@ public class LogAnalyser extends Configured implements Tool {
 		job.setJarByClass(LogAnalyser.class);
 
 		NonSplitableTextInputFormat.setInputPaths(job, args[0]);
-		NonSplitableTextInputFormat.setInputPathFilter(job, new PathFilter() {
-			@Override
-			public boolean accept(Path path) {
-				return path.getName().startsWith("c000");
-			}		
-		});
+		NonSplitableTextInputFormat.setInputPathFilter(job, LogFileFilter.class);
 		job.setInputFormatClass(NonSplitableTextInputFormat.class);
 		job.setMapperClass(RegexFilenameMapper.class);
 		job.setMapOutputKeyClass(Text.class);
@@ -136,11 +131,15 @@ public class LogAnalyser extends Configured implements Tool {
 			return false;
 		}
 
-		public static void setInputPathFilter(Job job, PathFilter pathFilter) {
-			// TODO Auto-generated method stub
-			
-		}
+	}
+	
+	public static class LogFileFilter implements PathFilter {
 
+		@Override
+		public boolean accept(Path path) {
+			return path.getName().startsWith("c000");
+		}
+		
 	}
 
 	public static void main(String[] args) throws Exception {
