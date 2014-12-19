@@ -7,6 +7,7 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -51,6 +52,12 @@ public class LogAnalyser extends Configured implements Tool {
 		job.setJarByClass(LogAnalyser.class);
 
 		NonSplitableTextInputFormat.setInputPaths(job, args[0]);
+		NonSplitableTextInputFormat.setInputPathFilter(job, new PathFilter() {
+			@Override
+			public boolean accept(Path path) {
+				return path.getName().startsWith("c000");
+			}		
+		});
 		job.setInputFormatClass(NonSplitableTextInputFormat.class);
 		job.setMapperClass(RegexFilenameMapper.class);
 		job.setMapOutputKeyClass(Text.class);
@@ -127,6 +134,11 @@ public class LogAnalyser extends Configured implements Tool {
 		@Override
 		protected boolean isSplitable(JobContext context, Path file) {
 			return false;
+		}
+
+		public static void setInputPathFilter(Job job, PathFilter pathFilter) {
+			// TODO Auto-generated method stub
+			
 		}
 
 	}
