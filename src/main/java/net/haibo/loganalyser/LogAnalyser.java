@@ -1,13 +1,13 @@
 package net.haibo.loganalyser;
 
 import java.io.IOException;
+import java.util.Iterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -15,8 +15,8 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.lib.input.FileSplit;
-import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit;
+import org.apache.hadoop.mapreduce.lib.input.CombineTextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -52,9 +52,9 @@ public class LogAnalyser extends Configured implements Tool {
 		job.setJarByClass(LogAnalyser.class);
 
 		NonSplitableTextInputFormat.setInputPaths(job, args[0]);
-		NonSplitableTextInputFormat.setInputPathFilter(job, LogFileFilter.class);
 		job.setInputFormatClass(NonSplitableTextInputFormat.class);
 		job.setMapperClass(RegexFilenameMapper.class);
+		job.setReducerClass(IdentityReducer.class);
 		job.setMapOutputKeyClass(Text.class);
 		job.setMapOutputValueClass(IntWritable.class);
 		
@@ -66,65 +66,55 @@ public class LogAnalyser extends Configured implements Tool {
 		return (job.waitForCompletion(true) ? 0 : 1);
 	}
 
+	
+	// As now we use CombineTextInputFormat, (usually) multiple files will be combined into
+	// a split. We cannot just simply break the loop in run() method when we find the bad pattern
+	// -- that will break out of the map for multiple files. Use Combiner/Reducer to do the trick
 	public static class RegexFilenameMapper extends
 			Mapper<LongWritable, Text, Text, IntWritable> {
 
 	
-		private String fileName;
 		private Pattern badLinesPattern = Pattern
 				.compile("\\b([1-9]\\d*)\\s+bad\\s+lines\\b");
-		private boolean patternFound = false;
-
-		@Override
-		protected void setup(
-				Mapper<LongWritable, Text, Text, IntWritable>.Context context)
-				throws IOException, InterruptedException {
-			
-			super.setup(context);
-			
-			fileName = ((FileSplit) context.getInputSplit()).getPath().getName();
-
-		}
+		private int idx = -1; // index into the set of files in the combined file
 		
-		@Override
-		public void run(
-				Mapper<LongWritable, Text, Text, IntWritable>.Context context)
-						throws IOException, InterruptedException {
-			
-			setup(context);
-			try {
-				while (context.nextKeyValue() && patternFound == false ) {
-					map(context.getCurrentKey(), context.getCurrentValue(), context);
-				}
-			} finally {
-				cleanup(context);
-			}
-		}
 
 		@Override
 		protected void map(LongWritable key, Text value,
 				Mapper<LongWritable, Text, Text, IntWritable>.Context context)
 				throws IOException, InterruptedException {
 
+			if ( key.get() == 0) {
+				idx++;
+			}
+			
 			Matcher matcher = badLinesPattern.matcher(value.toString());
 			if (matcher.find()) {
+				String fileName = ((CombineFileSplit) context.getInputSplit()).getPath(idx).getName();
+				//String fileName = context.getConfiguration().get(MRJobConfig.MAP_INPUT_FILE);
 				context.write(new Text(fileName),
 						new IntWritable(Integer.parseInt(matcher.group(1))));
-				patternFound = true;
-				
 			}
 		}
 	}
+	
 
-	// the default implementation will just write out whatever it gets from the
-	// map task
 	public static class IdentityReducer extends
 			Reducer<Text, IntWritable, Text, IntWritable> {
 
+		@Override
+		protected void reduce(Text key, Iterable<IntWritable> values,
+				Reducer<Text, IntWritable, Text, IntWritable>.Context context)
+				throws IOException, InterruptedException {
+
+				Iterator<IntWritable> itr = values.iterator();
+				IntWritable firstCount = itr.hasNext()? itr.next():new IntWritable(0);
+				context.write(key, firstCount);
+		}
 	}
 
 	// each log file is an atomic unit. Splitting it has no meaning here.
-	public static class NonSplitableTextInputFormat extends TextInputFormat {
+	public static class NonSplitableTextInputFormat extends CombineTextInputFormat {
 
 		@Override
 		protected boolean isSplitable(JobContext context, Path file) {
@@ -133,15 +123,7 @@ public class LogAnalyser extends Configured implements Tool {
 
 	}
 	
-	public static class LogFileFilter implements PathFilter {
-
-		@Override
-		public boolean accept(Path path) {
-			return path.getName().startsWith("c000");
-		}
-		
-	}
-
+	
 	public static void main(String[] args) throws Exception {
 		int res = ToolRunner.run(new Configuration(), new LogAnalyser(), args);
 		System.exit(res);
