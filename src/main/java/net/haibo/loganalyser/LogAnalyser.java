@@ -1,15 +1,14 @@
 package net.haibo.loganalyser;
 
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -54,12 +53,12 @@ public class LogAnalyser extends Configured implements Tool {
 		NonSplitableTextInputFormat.setInputPaths(job, args[0]);
 		job.setInputFormatClass(NonSplitableTextInputFormat.class);
 		job.setMapperClass(RegexFilenameMapper.class);
-		job.setReducerClass(IdentityReducer.class);
+
 		job.setMapOutputKeyClass(Text.class);
-		job.setMapOutputValueClass(IntWritable.class);
+		job.setMapOutputValueClass(NullWritable.class);
 		
 
-		job.setReducerClass(IdentityReducer.class);
+		job.setReducerClass(Reducer.class);
 		FileOutputFormat.setOutputPath(job, new Path(args[1]));
 		job.setNumReduceTasks(1); 
 
@@ -71,7 +70,7 @@ public class LogAnalyser extends Configured implements Tool {
 	// a split. We cannot just simply break the loop in run() method when we find the bad pattern
 	// -- that will break out of the map for multiple files. Use Combiner/Reducer to do the trick
 	public static class RegexFilenameMapper extends
-			Mapper<LongWritable, Text, Text, IntWritable> {
+			Mapper<LongWritable, Text, Text, NullWritable> {
 
 	
 		private Pattern badLinesPattern = Pattern
@@ -81,7 +80,7 @@ public class LogAnalyser extends Configured implements Tool {
 
 		@Override
 		protected void map(LongWritable key, Text value,
-				Mapper<LongWritable, Text, Text, IntWritable>.Context context)
+				Mapper<LongWritable, Text, Text, NullWritable>.Context context)
 				throws IOException, InterruptedException {
 
 			if ( key.get() == 0) {
@@ -93,23 +92,22 @@ public class LogAnalyser extends Configured implements Tool {
 				String fileName = ((CombineFileSplit) context.getInputSplit()).getPath(idx).getName();
 				//String fileName = context.getConfiguration().get(MRJobConfig.MAP_INPUT_FILE);
 				context.write(new Text(fileName),
-						new IntWritable(Integer.parseInt(matcher.group(1))));
+						NullWritable.get());
 			}
 		}
 	}
 	
 
 	public static class IdentityReducer extends
-			Reducer<Text, IntWritable, Text, IntWritable> {
+			Reducer<Text, NullWritable, Text, NullWritable> {
 
 		@Override
-		protected void reduce(Text key, Iterable<IntWritable> values,
-				Reducer<Text, IntWritable, Text, IntWritable>.Context context)
+		protected void reduce(Text key, Iterable<NullWritable> values,
+				Reducer<Text, NullWritable, Text, NullWritable>.Context context)
 				throws IOException, InterruptedException {
 
-				Iterator<IntWritable> itr = values.iterator();
-				IntWritable firstCount = itr.hasNext()? itr.next():new IntWritable(0);
-				context.write(key, firstCount);
+
+				context.write(key, NullWritable.get());
 		}
 	}
 
